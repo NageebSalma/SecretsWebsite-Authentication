@@ -1,0 +1,126 @@
+//jshint esversion:6
+
+require('dotenv').config()
+const express = require("express");
+const bodyParser = require("body-parser");
+const ejs = require("ejs");
+const encrypt = require('mongoose-encryption');
+
+const app = express();
+app.set('view engine', 'ejs');
+app.use(bodyParser.urlencoded({extended: true}));
+app.use(express.static("public"));
+
+
+const mongoose = require('mongoose');
+mongoose.connect('mongodb://localhost:27017/userDB' , {
+  useNewUrlParser: true
+});
+
+
+
+
+var userSchema = new mongoose.Schema({
+  email : String ,
+  password: String
+});
+
+var secret = process.env.SECRET
+
+userSchema.plugin(encrypt, { secret: secret , excludeFromEncryption: ['email']});
+
+const User = mongoose.model("user" , userSchema);
+
+///////////
+app.route("/")
+
+.get((req , res) => {
+  res.render("home.ejs")
+})
+
+
+///////////
+app.route("/login")
+
+.get((req , res) => {
+  res.render("login.ejs")
+})
+
+.post((req , res) => {
+  User.findOne(
+    {
+     email : req.body.username,
+   } ,
+
+   (err , foundUser) => {
+     if(err){
+       console.log("wrong")
+       res.render("login.ejs")
+     }
+     else{
+       if(foundUser){
+         //console.log(foundUser.password)
+         if(foundUser.password === req.body.password){
+           console.log("found user password matches inserted")
+            res.render("secrets.ejs")
+         }
+         else{
+           console.log("nope")
+           res.render("login.ejs")
+         }
+       }
+
+     }
+   })
+})
+
+
+///////////
+app.route("/register")
+
+.get((req , res) => {
+  res.render("register.ejs")
+})
+
+.post((req , res) => {
+
+  User.findOne({email : req.body.username} , (err , emailFound) => {
+    if(emailFound) {
+      res.render("login.ejs")
+    }
+    else if(err){
+      res.send(err)
+    }
+    else{
+      const newUser = new User({
+        email : req.body.username,
+        password : req.body.password
+      })
+
+      newUser.save((err) => {
+        if(err) console.log(err)
+        else{
+          res.render("secrets.ejs")
+        }
+      })
+
+
+    }
+  })
+
+})
+
+////////
+app.route("/submit")
+
+.get((req , res) => {
+  res.render("submit.ejs")
+})
+
+.post((req , res) =>{
+
+})
+
+app.listen(3000 , ()=>{
+  console.log("server is on")
+})
