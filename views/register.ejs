@@ -1,5 +1,17 @@
 <%- include('partials/header') %>
 <div class="container mt-5">
+  <% if(warningMSGREGISTER.length !== 0){%>
+    <div class="alert alert-warning" role="alert">
+      <% if(warningMSGREGISTER.includes("sign up")){%>
+       <%= warningMSGREGISTER %> <a href="/register">here!</a>
+      <%}
+    else{ %>
+        <%= warningMSGREGISTER %>
+    <%  } %>
+
+  </div>
+  <%}%>
+
   <h1>Register</h1>
 
   <div class="row">
