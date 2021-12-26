@@ -4,15 +4,20 @@ require('dotenv').config()
 const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
-// const ejsLint = require('ejs-lint');
-//level 1 is simply checking matching password insertion with registered in DB
-// const encrypt = require('mongoose-encryption');//level2 : DB Encryption
-// const md5 = require('md5'); //level3 : Hashing Passwords
-// const bcrypt = require('bcrypt');//level 4 : Salting and hashing
-// const saltRounds = 10;
+// // const ejsLint = require('ejs-lint');
+// //level 1 is simply checking matching password insertion with registered in DB
+// // const encrypt = require('mongoose-encryption');//level2 : DB Encryption
+// // const md5 = require('md5'); //level3 : Hashing Passwords
+// // const bcrypt = require('bcrypt');//level 4 : Salting and hashing
+// // const saltRounds = 10;
 const session = require('express-session')//level 5 : Session and cookies and passport auth
 const passport = require("passport");
 const passportLocalMongoose = require('passport-local-mongoose');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const FacebookStrategy = require('passport-facebook').Strategy;
+
+const findOrCreate = require('mongoose-findorcreate') //making the OAuth docs more than just psuedo code
+
 
 let warningMSGLOGIN = ""
 let warningMSGREGISTER = ""
@@ -43,10 +48,13 @@ mongoose.connect('mongodb://localhost:27017/userDB' , {
 
 var userSchema = new mongoose.Schema({
   email : String ,
-  password: String
+  password: String,
+  googleId:String,
+  facebookId: String
 });
 
 userSchema.plugin(passportLocalMongoose);
+userSchema.plugin(findOrCreate)
 // userSchema.plugin(encrypt, { secret: secret , excludeFromEncryption: ['email']});
 const User = mongoose.model("user" , userSchema);
 
@@ -54,8 +62,47 @@ const User = mongoose.model("user" , userSchema);
 passport.use(User.createStrategy());
 
 // use static serialize and deserialize of model for passport session support
-passport.serializeUser(User.serializeUser());
-passport.deserializeUser(User.deserializeUser());
+passport.serializeUser(function(user, done) {
+    done(null, user._id);
+    // if you use Model.id as your idAttribute maybe you'd want
+    // done(null, user.id);
+});
+
+passport.deserializeUser(function(id, done) {
+  User.findById(id, function(err, user) {
+    done(err, user);
+  });
+});
+
+
+//google sign in
+passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLEID,
+    clientSecret: process.env.GOOGLESECRET,
+    callbackURL: "http://localhost:3000/auth/google/secrets"
+  },
+  function(accessToken, refreshToken, profile, cb) {
+    User.findOrCreate({ googleId: profile.id }, function (err, user) {
+      return cb(err, user);
+    });
+  }
+));
+
+//facebook sign in
+passport.use(new FacebookStrategy({
+    clientID: process.env.FACEBOOK_APP_ID,
+    clientSecret: process.env.FACEBOOK_APP_SECRET,
+    callbackURL: "http://localhost:3000/auth/facebook/secrets",
+    profileFields: ['id', 'displayName', 'email'],
+    enableProof: true
+  },
+  function(accessToken, refreshToken, profile, cb) {
+    User.findOrCreate({ facebookId: profile.id }, function (err, user) {
+      return cb(err, user);
+    });
+  }
+));
+
 
 ///////////
 app.route("/")
@@ -144,9 +191,31 @@ app.route("/submit")
 
 })
 
-app.listen(3000 , ()=>{
-  console.log("server is on")
-})
+
+
+////////
+app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+
+app.get('/auth/google/secrets',
+  passport.authenticate('google', { failureRedirect: '/login' }),
+  function(req, res) {
+      // Successful authentication, redirect home.
+      res.redirect('/secrets');
+  });
+
+
+  /////////
+  app.get('/auth/facebook',
+  passport.authenticate('facebook', { authType: 'reauthenticate' , scope: ['user_friends', 'email'] }));
+
+  app.get('/auth/facebook/secrets',
+    passport.authenticate('facebook', { failureRedirect: '/login' }),
+    function(req, res) {
+        // Successful authentication, redirect secrets.
+        res.redirect('/secrets');
+    });
+
+
 ////////
 app.route("/secrets")
 
@@ -166,3 +235,10 @@ app.get('/logout', function(req, res){
   req.logout();
   res.redirect('/');
 });
+
+
+
+
+app.listen(3000 , ()=>{
+  console.log("server is on")
+})
