@@ -32,9 +32,10 @@ const secret = process.env.SECRET
 app.use(session({
   secret: secret,
   resave: false,
-  saveUninitialized: false
-  // cookie: { secure: true }
+  saveUninitialized: false,
+  cookie: { secure: true }
 }))
+
 
 app.use(passport.initialize());
 app.use(passport.session());
@@ -50,7 +51,8 @@ var userSchema = new mongoose.Schema({
   email : String ,
   password: String,
   googleId:String,
-  facebookId: String
+  facebookId: String,
+  secrets : Array
 });
 
 userSchema.plugin(passportLocalMongoose);
@@ -61,15 +63,21 @@ const User = mongoose.model("user" , userSchema);
 // use static authenticate method of model in LocalStrategy
 passport.use(User.createStrategy());
 
+let specificUserId
 // use static serialize and deserialize of model for passport session support
 passport.serializeUser(function(user, done) {
+    specificUserId = user._id
     done(null, user._id);
     // if you use Model.id as your idAttribute maybe you'd want
     // done(null, user.id);
 });
 
+
 passport.deserializeUser(function(id, done) {
+  console.log("inside deserialize")
+
   User.findById(id, function(err, user) {
+    console.log("user "+ user)
     done(err, user);
   });
 });
@@ -188,7 +196,22 @@ app.route("/submit")
 })
 
 .post((req , res) =>{
+  const submittedSecret = req.body.secret;
+  console.log(submittedSecret)
+  // const userId = req.user.username
 
+  User.findById(specificUserId , (err , foundUser) => {
+    if(err) console.log(err)
+    else{
+      console.log(foundUser)
+      foundUser.secrets.push(submittedSecret)
+      foundUser.save()
+
+    }
+
+  })
+
+  res.redirect("/secrets")
 })
 
 
@@ -220,16 +243,29 @@ app.get('/auth/google/secrets',
 app.route("/secrets")
 
 .get((req , res) => {
-  //Checking if the user trying to access the page is a system user or not
-  if(req.isAuthenticated()){
-    res.render("secrets.ejs")
-  }
-  else{
-    warningMSGLOGIN = "Please log in first to access the Secrets page. Not a member? sign up "
-    res.redirect("/login")
-  }
+  User.find({secrets: {$ne:null}} , (err , foundusers) => {
+    if(err) console.log(err)
+    else{
+
+      res.render("secrets.ejs" , {
+        usersWithSecrets : foundusers
+      })
+    }
+  })
+  // Checking if the user trying to access the page is a system user or not
+  // if(req.isAuthenticated()){
+  //   res.render("secrets.ejs")
+  // }
+  // else{
+  //   warningMSGLOGIN = "Please log in first to access the Secrets page. Not a member? sign up "
+  //   res.redirect("/login")
+  // }
 })
 
+
+.post((req , res) => {
+
+})
 ///////
 app.get('/logout', function(req, res){
   req.logout();
